@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>火花续火 - 任务配置器</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f5f5f5; color: #333; }
+.header { background: #fff; padding: 16px 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); position: sticky; top: 0; z-index: 10; }
+.header h1 { font-size: 20px; margin-bottom: 10px; }
+.header-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.search { flex: 1; min-width: 180px; padding: 8px 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; }
+.search:focus { outline: none; border-color: #fe2c55; }
+.btn { padding: 8px 16px; border: none; border-radius: 8px; font-size: 13px; cursor: pointer; font-weight: 500; white-space: nowrap; }
+.btn-primary { background: #fe2c55; color: #fff; }
+.btn-primary:hover { background: #e6254a; }
+.btn-outline { background: #fff; color: #666; border: 1px solid #ddd; }
+.btn-outline:hover { background: #f0f0f0; }
+.btn-copy { background: #333; color: #fff; }
+.btn-copy:hover { background: #555; }
+.stats { color: #999; font-size: 13px; white-space: nowrap; }
+
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 10px; padding: 16px; }
+
+.card { background: #fff; border-radius: 12px; padding: 14px; border: 2px solid transparent; transition: all 0.15s; }
+.card.selected { border-color: #fe2c55; background: #fff5f7; }
+.card-top { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; cursor: pointer; }
+.avatar { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; background: #eee; flex-shrink: 0; }
+.info { flex: 1; min-width: 0; }
+.nickname { font-size: 15px; font-weight: 500; }
+.short-id { font-size: 12px; color: #999; margin-top: 1px; }
+.check-circle { width: 22px; height: 22px; border-radius: 50%; border: 2px solid #ddd; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+.card.selected .check-circle { background: #fe2c55; border-color: #fe2c55; }
+.card.selected .check-circle::after { content: "\2713"; color: #fff; font-size: 13px; }
+
+.actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.tag { padding: 4px 10px; border-radius: 14px; font-size: 12px; cursor: pointer; border: 1px solid #ddd; background: #fff; color: #666; user-select: none; transition: all 0.12s; }
+.tag.on { background: #fe2c55; color: #fff; border-color: #fe2c55; }
+.tag-combo { background: #fff; color: #fe2c55; border-color: #fe2c55; font-weight: 600; }
+.tag-combo.on { background: #fe2c55; color: #fff; }
+.custom-input { flex: 1; min-width: 80px; padding: 4px 8px; border: 1px solid #ddd; border-radius: 14px; font-size: 12px; display: none; }
+.custom-input.show { display: inline-block; }
+.custom-input:focus { outline: none; border-color: #fe2c55; }
+
+.bar { position: sticky; bottom: 0; background: #fff; padding: 12px 20px; box-shadow: 0 -1px 3px rgba(0,0,0,0.08); display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.bar .stats { flex: 1; }
+
+.modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4); z-index: 100; justify-content: center; align-items: center; }
+.modal-overlay.show { display: flex; }
+.modal { background: #fff; border-radius: 16px; padding: 24px; max-width: 650px; width: 92%; max-height: 85vh; display: flex; flex-direction: column; }
+.modal h2 { font-size: 18px; margin-bottom: 6px; }
+.modal .hint { color: #999; font-size: 12px; margin-bottom: 12px; }
+.modal textarea { flex: 1; border: 1px solid #ddd; border-radius: 8px; padding: 12px; font-family: monospace; font-size: 12px; resize: vertical; min-height: 200px; }
+.modal .btn-row { margin-top: 14px; display: flex; gap: 8px; justify-content: flex-end; }
+.toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #333; color: #fff; padding: 10px 24px; border-radius: 8px; font-size: 14px; z-index: 200; opacity: 0; transition: opacity 0.25s; pointer-events: none; }
+.toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>火花续火 - 任务配置器</h1>
+  <div class="header-row">
+    <input class="search" placeholder="搜索昵称或抖音号..." oninput="renderAll()">
+    <span class="stats" id="stats">已选 0 人</span>
+    <button class="btn btn-outline" onclick="selectAll()">全选</button>
+    <button class="btn btn-outline" onclick="clearAll()">清空</button>
+  </div>
+</div>
+
+<div class="grid" id="grid"></div>
+
+<div class="bar">
+  <span class="stats" id="barStats">共 0 个任务</span>
+  <button class="btn btn-primary" onclick="exportJSON()">导出 JSON</button>
+  <button class="btn btn-copy" onclick="copyJSON()">一键复制</button>
+</div>
+
+<div class="modal-overlay" id="modal">
+  <div class="modal">
+    <h2>导出 tasks.json</h2>
+    <p class="hint">复制以下内容替换项目中的 tasks.json 文件，然后运行 python run_tasks.py</p>
+    <textarea id="output" readonly></textarea>
+    <div class="btn-row">
+      <button class="btn btn-outline" onclick="closeModal()">关闭</button>
+      <button class="btn btn-copy" onclick="copyFromModal()">复制到剪贴板</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+var FRIENDS = [];
+
+// Selected state: { short_id: { actions: [1,2,3], message: "" } }
+var selections = {};
+
+function getFiltered() {
+  var q = document.querySelector(".search").value.toLowerCase();
+  if (!q) return FRIENDS;
+  return FRIENDS.filter(function(f) {
+    return f.nickname.toLowerCase().indexOf(q) !== -1 || f.short_id.indexOf(q) !== -1;
+  });
+}
+
+function isSelected(sid) { return !!selections[sid]; }
+
+function getAvatar(f) {
+  if (f.avatars && f.avatars.length > 0) return f.avatars[0];
+  return "data:image/svg+xml," + encodeURIComponent("<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect fill='#eee' width='100' height='100'/><text x='50' y='55' text-anchor='middle' fill='#999' font-size='40'>?</text></svg>");
+}
+
+function getActions(sid) {
+  return selections[sid] ? selections[sid].actions.slice() : [];
+}
+
+function getMessage(sid) {
+  return selections[sid] ? selections[sid].message || "" : "";
+}
+
+function hasAction(sid, code) {
+  return getActions(sid).indexOf(code) !== -1;
+}
+
+function toggleFriend(sid) {
+  if (selections[sid]) {
+    delete selections[sid];
+  } else {
+    selections[sid] = { actions: [3], message: "" };
+  }
+  renderAll();
+}
+
+function toggleAction(sid, code) {
+  if (!selections[sid]) return;
+  var acts = selections[sid].actions;
+  var idx = acts.indexOf(code);
+  if (idx === -1) {
+    acts.push(code);
+    acts.sort();
+  } else {
+    acts.splice(idx, 1);
+  }
+  // If nothing selected, remove the friend
+  if (acts.length === 0 && !selections[sid].message) {
+    delete selections[sid];
+  }
+  renderAll();
+}
+
+function combo3(sid) {
+  if (!selections[sid]) {
+    selections[sid] = { actions: [], message: "" };
+  }
+  var acts = selections[sid].actions;
+  if (acts.length === 3 && acts.indexOf(1) !== -1 && acts.indexOf(2) !== -1 && acts.indexOf(3) !== -1) {
+    // Already combo, remove all
+    selections[sid].actions = [];
+  } else {
+    selections[sid].actions = [1, 2, 3];
+  }
+  if (selections[sid].actions.length === 0 && !selections[sid].message) {
+    delete selections[sid];
+  }
+  renderAll();
+}
+
+function updateMessage(sid, val) {
+  if (!selections[sid]) {
+    selections[sid] = { actions: [], message: val };
+  } else {
+    selections[sid].message = val;
+  }
+  if (!selections[sid].message && selections[sid].actions.length === 0) {
+    delete selections[sid];
+  }
+}
+
+function renderAll() {
+  renderCards(getFiltered());
+  updateStats();
+}
+
+function renderCards(friends) {
+  var grid = document.getElementById("grid");
+  grid.innerHTML = "";
+  for (var i = 0; i < friends.length; i++) {
+    var f = friends[i];
+    var sid = f.short_id;
+    var sel = isSelected(sid);
+    var acts = getActions(sid);
+    var msg = getMessage(sid);
+    var avatar = getAvatar(f);
+
+    var card = document.createElement("div");
+    card.className = "card" + (sel ? " selected" : "");
+
+    // Top row: avatar + name + check
+    var top = document.createElement("div");
+    top.className = "card-top";
+    top.onclick = function(s) { return function() { toggleFriend(s); }; }(sid);
+
+    var img = document.createElement("img");
+    img.className = "avatar";
+    img.src = avatar;
+    img.onerror = function() { this.src = "data:image/svg+xml," + encodeURIComponent("<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect fill='#eee' width='100' height='100'/><text x='50' y='55' text-anchor='middle' fill='#999' font-size='40'>?</text></svg>"); };
+
+    var info = document.createElement("div");
+    info.className = "info";
+    var nick = document.createElement("div");
+    nick.className = "nickname";
+    nick.textContent = f.nickname;
+    var sidDiv = document.createElement("div");
+    sidDiv.className = "short-id";
+    sidDiv.textContent = "抖音号: " + sid;
+    info.appendChild(nick);
+    info.appendChild(sidDiv);
+
+    var cb = document.createElement("div");
+    cb.className = "check-circle";
+
+    top.appendChild(img);
+    top.appendChild(info);
+    top.appendChild(cb);
+
+    // Action tags (only show if selected)
+    var actions = document.createElement("div");
+    actions.className = "actions";
+
+    if (sel) {
+      // 一键三连
+      var combo = document.createElement("span");
+      combo.className = "tag tag-combo" + (acts.length === 3 && acts.indexOf(1) !== -1 && acts.indexOf(2) !== -1 && acts.indexOf(3) !== -1 ? " on" : "");
+      combo.textContent = "一键三连";
+      combo.onclick = function(s) { return function(e) { e.stopPropagation(); combo3(s); }; }(sid);
+      actions.appendChild(combo);
+
+      var tags = [
+        [1, "文字"],
+        [2, "图片"],
+        [3, "表情"]
+      ];
+      for (var t = 0; t < tags.length; t++) {
+        var tag = document.createElement("span");
+        tag.className = "tag" + (hasAction(sid, tags[t][0]) ? " on" : "");
+        tag.textContent = tags[t][1];
+        tag.onclick = function(s, code) { return function(e) { e.stopPropagation(); toggleAction(s, code); }; }(sid, tags[t][0]);
+        actions.appendChild(tag);
+      }
+
+      // Custom text input
+      var customTag = document.createElement("span");
+      customTag.className = "tag" + (msg ? " on" : "");
+      customTag.textContent = msg ? "自定义" : "+文字";
+      customTag.onclick = function(s, input) { return function(e) {
+        e.stopPropagation();
+        input.classList.toggle("show");
+        input.focus();
+      }; }(sid);
+      actions.appendChild(customTag);
+
+      var customInput = document.createElement("input");
+      customInput.className = "custom-input" + (msg ? " show" : "");
+      customInput.placeholder = "自定义文字...";
+      customInput.value = msg;
+      customInput.setAttribute("data-sid", sid);
+      customInput.oninput = function(s) { return function() { updateMessage(s, this.value); }; }(sid);
+      customInput.onclick = function(e) { e.stopPropagation(); };
+      actions.appendChild(customInput);
+    }
+
+    card.appendChild(top);
+    card.appendChild(actions);
+    grid.appendChild(card);
+  }
+}
+
+function updateStats() {
+  var count = Object.keys(selections).length;
+  document.getElementById("stats").textContent = "已选 " + count + " 人";
+  document.getElementById("barStats").textContent = "共 " + count + " 个任务";
+}
+
+function selectAll() {
+  var filtered = getFiltered();
+  for (var i = 0; i < filtered.length; i++) {
+    var sid = filtered[i].short_id;
+    if (!selections[sid]) {
+      selections[sid] = { actions: [3], message: "" };
+    }
+  }
+  renderAll();
+}
+
+function clearAll() {
+  selections = {};
+  renderAll();
+}
+
+function buildTasksJSON() {
+  var tasks = [];
+  var sids = Object.keys(selections);
+  for (var i = 0; i < sids.length; i++) {
+    var sid = sids[i];
+    var sel = selections[sid];
+    // Find the friend to get nickname
+    var friend = null;
+    for (var j = 0; j < FRIENDS.length; j++) {
+      if (FRIENDS[j].short_id === sid) { friend = FRIENDS[j]; break; }
+    }
+    var target = (friend && friend.nickname) ? friend.nickname : sid;
+    var entry = { target: target, actions: sel.actions.length > 0 ? sel.actions : [3] };
+    if (sel.message) {
+      entry.message = sel.message;
+      if (entry.actions.indexOf(0) === -1) entry.actions.push(0);
+    }
+    tasks.push(entry);
+  }
+  return JSON.stringify({ _说明: "target 填昵称或抖音号, actions: 1=文字 2=图片 3=表情 0=自定义", tasks: tasks }, null, 2);
+}
+
+function exportJSON() {
+  var json = buildTasksJSON();
+  document.getElementById("output").value = json;
+  document.getElementById("modal").classList.add("show");
+}
+
+function closeModal() {
+  document.getElementById("modal").classList.remove("show");
+}
+
+function copyJSON() {
+  var json = buildTasksJSON();
+  navigator.clipboard.writeText(json).then(function() {
+    showToast("已复制到剪贴板!");
+  }).catch(function() {
+    // Fallback
+    var ta = document.createElement("textarea");
+    ta.value = json;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    document.body.removeChild(ta);
+    showToast("已复制到剪贴板!");
+  });
+}
+
+function copyFromModal() {
+  var ta = document.getElementById("output");
+  ta.select();
+  document.execCommand("copy");
+  showToast("已复制!");
+}
+
+function showToast(msg) {
+  var toast = document.getElementById("toast");
+  toast.textContent = msg;
+  toast.classList.add("show");
+  setTimeout(function() { toast.classList.remove("show"); }, 1800);
+}
+
+renderAll();
+</script>
+</body>
+</html>
