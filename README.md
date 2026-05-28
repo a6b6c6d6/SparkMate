@@ -166,6 +166,50 @@ context = playwright.chromium.launch_persistent_context(
 
 > **注意：** 改用无头后如再次触发风控验证，需要切回 `headless=False` 手动过验证，然后再改回去。
 
+### 定时自动运行
+
+火花每 24 小时不互动就会熄灭，建议每天定时跑一次即可。
+
+#### Windows — 任务计划程序
+
+1. 按 `Win+R`，输入 `taskschd.msc`，打开任务计划程序
+2. 右侧点击「创建基本任务」→ 名称填 `SparkMate`
+3. 触发器选「每天」，设置一个你电脑通常开机的时间（如 20:00）
+4. 操作选「启动程序」：
+   - 程序：`python`（或 Python 的完整路径，如 `C:\Users\你的用户名\AppData\Local\Programs\Python\Python311\python.exe`）
+   - 参数：`run_tasks.py`
+   - 起始于：`D:\ClaudeCode\SparkMate`（项目目录路径）
+5. 勾选「完成时打开属性对话框」→ 在「条件」选项卡取消勾选「只有在计算机使用交流电源时才…」（如果用笔记本）
+6. 点击确定保存
+
+> 运行 `python run_tasks.py` 会执行 `tasks.json` 中所有好友的续火花动作。若只想给特定好友发，提前编辑 `tasks.json`。
+
+#### Linux / macOS — cron
+
+```bash
+# 编辑 crontab
+crontab -e
+
+# 添加一行：每天 20:00 执行（改成你的项目路径）
+0 20 * * * cd /path/to/SparkMate && /usr/bin/python run_tasks.py >> logs/cron.log 2>&1
+```
+
+```bash
+# 验证定时任务已添加
+crontab -l
+
+# 如果只需发图或发表情给单个好友：
+0 20 * * * cd /path/to/SparkMate && /usr/bin/python send_image.py "好友昵称" >> logs/cron.log 2>&1
+```
+
+#### 运行频率建议
+
+| 建议 | 说明 |
+|------|------|
+| 每天 1 次 | 推荐，足够维持火花，不会触发风控 |
+| 每天 2 次 | 可接受，早晚各一次 |
+| 每小时 | ⚠️ 不推荐，高频率易触发账号风控 |
+
 ### 环境变量配置（.env）
 
 项目支持通过 `.env` 文件配置多用户、Cookie 及高级参数，是 `main.py` 入口的配置来源。
