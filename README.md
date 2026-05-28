@@ -178,7 +178,7 @@ context = playwright.chromium.launch_persistent_context(
 4. 操作选「启动程序」：
    - 程序：`python`（或 Python 的完整路径，如 `C:\Users\你的用户名\AppData\Local\Programs\Python\Python311\python.exe`）
    - 参数：`run_tasks.py`
-   - 起始于：`D:\ClaudeCode\SparkMate`（项目目录路径）
+   - 起始于：`D:\aaaa\SparkMate`（项目目录路径）
 5. 勾选「完成时打开属性对话框」→ 在「条件」选项卡取消勾选「只有在计算机使用交流电源时才…」（如果用笔记本）
 6. 点击确定保存
 
