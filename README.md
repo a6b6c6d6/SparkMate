@@ -86,38 +86,50 @@ python -c "from playwright.sync_api import sync_playwright; p = sync_playwright(
 
 ### 2. 配置 Cookie
 
-`cookies.json` 是维持登录态的核心文件，需包含以下关键字段：
+Cookie 通过 `.env` 文件配置，是维持登录态的核心。需包含以下关键字段：
 
 | 字段 | 必要性 | 说明 |
 |------|--------|------|
 | `sessionid` | **必填** | 抖音登录会话 ID，最关键鉴权凭证 |
 | `passport_csrf_token` | **必填** | CSRF 防护令牌，发消息等写操作必需 |
-| `ttwid` / `msToken` / `odin_tt` | 推荐 | 提升请求稳定性，降低风控触发概率 |
+| `sid_tt` / `uid_tt` / `odin_tt` | 推荐 | 提升请求稳定性，降低风控触发概率 |
 
-**获取方式：** 浏览器登录 [douyin.com](https://www.douyin.com) → F12 → Application → Cookies → 复制对应值。也可使用 EditThisCookie 等插件一键导出 JSON。
+**获取方式：** 浏览器登录 [douyin.com](https://www.douyin.com) → F12 → Application → Cookies → 复制对应值。
 
-> ⚠️ Cookie 等同于账号密码，请勿提交到 Git 或分享给他人。建议将 `cookies.json` 加入 `.gitignore`。
+> ⚠️ Cookie 等同于账号密码，`.env` 已默认加入 `.gitignore`，请勿手动删除该规则。
 
-**示例格式（敏感值已替换）：**
-```json
-[
-  {"name": "sessionid", "value": "example_session_id_xxxxxxxx", "domain": ".douyin.com", "path": "/"},
-  {"name": "passport_csrf_token", "value": "example_csrf_token_xxxxxxxx", "domain": ".douyin.com", "path": "/"},
-  {"name": "ttwid", "value": "example_ttwid_xxxxxxxx", "domain": ".douyin.com", "path": "/"}
-]
+**`.env` 配置示例（敏感值已替换）：**
+
+```env
+TASKS=[{"username":"默认账号","unique_id":"USER1","targets":["好友昵称"]}]
+COOKIES_USER1=[{"name":"sessionid","value":"example_session_id","domain":".douyin.com","path":"/"},{"name":"passport_csrf_token","value":"example_csrf_token","domain":".douyin.com","path":"/"}]
 ```
 
 ### 3. 配置任务
 
 **方式一：可视化配置器（推荐）**
 
-1. 运行 `python build_friends_json.py` 生成好友数据
+1. 运行 `python build_friends_json.py` 生成好友数据（`friends.json`）
 2. 浏览器打开 `docs/friend_picker.html`
-3. 勾选好友、配置动作，点击「复制 JSON」粘贴到 `tasks.json`
+3. 勾选好友、配置动作（文字/图片/表情/自定义），点击「导出 JSON」或「一键复制」
+4. 将复制的内容保存为 `tasks.json`
+
+> 💡 修改好友数据后，运行 `python build_picker.py` 可重新生成 `friend_picker.html`。
 
 **方式二：手动编辑**
 
-直接编辑 `tasks.json`，格式参考项目内示例文件。
+直接编辑 `tasks.json`，格式如下：
+
+```json
+{
+  "tasks": [
+    {"target": "好友昵称", "actions": [1, 2, 3]},
+    {"target": "另一个好友", "actions": [3], "message": "自定义文字"}
+  ]
+}
+```
+
+其中 `actions`：`1`=文字（一言） `2`=图片 `3`=续火花表情 `0`=自定义文字
 
 ### 4. 运行
 
@@ -242,21 +254,23 @@ LOG_LEVEL=Info
 ## 📁 项目结构
 
 ```
-├── core/                  # 核心模块（浏览器控制、API 封装）
-├── utils/                 # 工具函数库
+├── core/                  # 核心模块（浏览器控制、消息构建、任务引擎）
+├── utils/                 # 工具函数库（配置、日志、一言 API）
 ├── docs/                  # 文档 & 可视化配置器
 │   └── friend_picker.html # 好友选择 & 任务配置页面
 ├── send_image.py          # 图片发送
-├── send_combo.py          # 组合消息发送
-├── send_spark_emoji.py    # 表情发送
-├── resolve_user.py        # 用户解析（昵称/抖音号）
-├── resolve_shortid.py     # ShortID 解析
-├── build_friends_json.py  # 好友列表构建
+├── send_combo.py          # 组合消息发送（文字+图片+表情）
+├── send_spark_emoji.py    # 续火花表情发送
+├── resolve_user.py        # 用户解析（昵称/抖音号/sec_uid）
+├── resolve_shortid.py     # ShortID → 昵称解析
+├── build_friends_json.py  # 好友列表抓取（互关好友）
+├── build_picker.py        # 好友选择器 HTML 生成器
 ├── build_shortid_map.py   # ShortID 映射生成
-├── run_tasks.py           # 批量任务调度器
-├── tasks.json             # 任务配置
-├── friends.json           # 好友数据缓存（自动生成）
-├── cookies.json           # 登录态 Cookie
+├── run_tasks.py           # 批量任务调度器（读取 tasks.json）
+├── main.py                # 入口（从 .env 读取配置，支持多用户）
+├── .env                   # 环境配置（Cookie、任务参数，已 gitignore）
+├── tasks.json             # 任务配置（由 friend_picker 生成，已 gitignore）
+├── friends.json           # 好友数据缓存（自动生成，已 gitignore）
 └── requirements.txt       # Python 依赖
 ```
 
