@@ -1,4 +1,20 @@
-<!DOCTYPE html>
+"""Generate a self-contained friend picker HTML for tasks.json config."""
+import json, os
+
+HERE = os.path.dirname(__file__)
+FRIENDS_FILE = os.path.join(HERE, "friends.json")
+OUTPUT_FILE = os.path.join(HERE, "docs", "friend_picker.html")
+
+# Load friends
+with open(FRIENDS_FILE, "r", encoding="utf-8") as f:
+    data = json.load(f)
+
+friends = data["friends"]
+friends_json = json.dumps(friends, ensure_ascii=False)
+
+os.makedirs(os.path.dirname(OUTPUT_FILE), exist_ok=True)
+
+HTML = r"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -92,7 +108,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 <div class="toast" id="toast"></div>
 
 <script>
-var FRIENDS = [];
+var FRIENDS = __FRIENDS_DATA__;
 
 // Selected state: { short_id: { actions: [1,2,3], message: "" } }
 var selections = {};
@@ -365,4 +381,14 @@ function showToast(msg) {
 renderAll();
 </script>
 </body>
-</html>
+</html>"""
+
+html = HTML.replace("__FRIENDS_DATA__", friends_json)
+
+with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
+    f.write(html)
+
+size_kb = len(html.encode("utf-8")) / 1024
+print(f"Generated {OUTPUT_FILE} ({size_kb:.1f} KB)")
+print(f"Friends embedded: {len(friends)}")
+print(f"\nOpen it: start docs/friend_picker.html")
