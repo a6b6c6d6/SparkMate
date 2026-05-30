@@ -92,6 +92,24 @@ def open_chat_via_profile(page, sec_uid, nickname):
         except:
             continue
 
+    # Fallback: JS click bypasses Playwright pointer-event interception (e.g. header overlay)
+    js_result = page.evaluate("""() => {
+        const btns = document.querySelectorAll('button');
+        for (const btn of btns) {
+            const text = btn.textContent?.trim();
+            if (text === '私信' || text === '发消息' || text === '聊天') {
+                if (btn.offsetParent !== null) {
+                    btn.click();
+                    return 'clicked: ' + text;
+                }
+            }
+        }
+        return 'not found';
+    }""")
+    if js_result.startswith('clicked'):
+        time.sleep(8)
+        return True
+
     return False
 
 
