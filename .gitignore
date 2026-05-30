@@ -60,6 +60,9 @@ desktop.ini
 # ========================
 browser_data/
 friends.json
+cookies.json
+tasks.json
+logs/
 
 # ========================
 # 调试截图 / 调试 JSON 文件
@@ -81,3 +84,8 @@ friends.json
 test-results/
 playwright-report/
 blob-report/
+
+# ========================
+# 调试报告（本地测试生成）
+# ========================
+BUG_REPORT.md
