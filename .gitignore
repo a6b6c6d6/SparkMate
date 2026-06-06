@@ -27,6 +27,7 @@ venv/
 ENV/
 env/
 .env
+CLAUDE.md
 
 # ========================
 # IDE / 编辑器
