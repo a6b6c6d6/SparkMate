@@ -113,11 +113,12 @@ COOKIES_USER1=[{"name":"sessionid","value":"example_session_id","domain":".douyi
 **方式一：可视化配置器（推荐）**
 
 1. 运行 `python build_friends_json.py` 生成好友数据（`friends.json`）
-2. 浏览器打开 `docs/friend_picker.html`
-3. 勾选好友、配置动作（文字/图片/表情/自定义），点击「导出 JSON」或「一键复制」
-4. 将复制的内容保存为 `tasks.json`
+2. 运行 `python build_picker.py` 生成本地配置器（`docs/friend_picker.local.html`）
+3. 浏览器打开 `docs/friend_picker.local.html`
+4. 勾选好友、配置动作（文字/图片/表情/自定义），点击「导出 JSON」或「一键复制」
+5. 将复制的内容保存为 `tasks.json`
 
-> 💡 修改好友数据后，运行 `python build_picker.py` 可重新生成 `friend_picker.html`。
+> 💡 `friends.json` 和 `docs/friend_picker.local.html` 都包含真实好友信息，已加入 `.gitignore`，请不要提交。仓库中的 `docs/friend_picker.html` 仅保留空数据模板。
 
 **方式二：手动编辑**
 
@@ -133,6 +134,11 @@ COOKIES_USER1=[{"name":"sessionid","value":"example_session_id","domain":".douyi
 ```
 
 其中 `actions`：`1`=文字（一言） `2`=图片 `3`=续火花表情 `0`=自定义文字
+
+> 为避免聊天搜索把好友昵称误匹配到群聊或最近消息，`run_tasks.py` 会先从
+> `friends.json` 读取目标好友的 `sec_uid`。如果命中缓存，会优先打开用户主页再点
+> 「私信」；只有没有 `sec_uid` 或主页私信打开失败时，才回退到聊天页搜索。
+> 因此建议在批量任务前先运行 `python build_friends_json.py` 更新好友缓存。
 
 ### 4. 运行
 
@@ -248,7 +254,8 @@ crontab -l
 ├── core/                  # 核心模块（浏览器控制、消息构建、任务引擎）
 ├── utils/                 # 工具函数库（配置、日志、一言 API）
 ├── docs/                  # 文档 & 可视化配置器
-│   └── friend_picker.html # 好友选择 & 任务配置页面
+│   ├── friend_picker.html       # 好友选择器模板（不含真实好友数据）
+│   └── friend_picker.local.html # 本地生成的好友选择器（已 gitignore）
 ├── send_image.py          # 图片发送
 ├── send_combo.py          # 组合消息发送（文字+图片+表情）
 ├── send_spark_emoji.py    # 续火花表情发送

@@ -62,6 +62,7 @@ browser_data/
 friends.json
 cookies.json
 tasks.json
+docs/friend_picker.local.html
 logs/
 
 # ========================

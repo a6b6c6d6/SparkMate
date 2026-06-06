@@ -3,7 +3,7 @@ import json, os
 
 HERE = os.path.dirname(__file__)
 FRIENDS_FILE = os.path.join(HERE, "friends.json")
-OUTPUT_FILE = os.path.join(HERE, "docs", "friend_picker.html")
+OUTPUT_FILE = os.path.join(HERE, "docs", "friend_picker.local.html")
 
 # Load friends
 with open(FRIENDS_FILE, "r", encoding="utf-8") as f:
@@ -391,4 +391,4 @@ with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
 size_kb = len(html.encode("utf-8")) / 1024
 print(f"Generated {OUTPUT_FILE} ({size_kb:.1f} KB)")
 print(f"Friends embedded: {len(friends)}")
-print(f"\nOpen it: start docs/friend_picker.html")
+print(f"\nOpen it: start docs/friend_picker.local.html")

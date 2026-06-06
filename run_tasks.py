@@ -21,6 +21,18 @@ def load_tasks():
     return config["tasks"]
 
 
+def load_friends():
+    """Load friends.json for nickname → sec_uid fallback lookup."""
+    if not os.path.exists(FRIENDS_FILE):
+        return {}
+    try:
+        with open(FRIENDS_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return {f["nickname"]: f for f in data.get("friends", [])}
+    except:
+        return {}
+
+
 def send_hitokoto(page):
     """Send a random hitokoto text via the current chat input."""
     try:
@@ -176,27 +188,13 @@ def run_single_target(page, task):
             time.sleep(2)  # Brief pause between actions
 
 
-def _lookup_secuid(nickname: str):
-    """Look up sec_uid from friends.json by nickname."""
-    if not os.path.exists(FRIENDS_FILE):
-        return None
-    try:
-        with open(FRIENDS_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        for f2 in data.get("friends", []):
-            if f2.get("nickname") == nickname:
-                return f2.get("sec_uid", "")
-    except:
-        pass
-    return None
-
-
 def main():
     user = get_userData()[0]
     cookies = user["cookies"]
     tasks = load_tasks()
+    friends = load_friends()
 
-    print(f"Loaded {len(tasks)} task(s)\n")
+    print(f"Loaded {len(tasks)} task(s), {len(friends)} friends in cache\n")
 
     playwright = sync_playwright().start()
     context = playwright.chromium.launch_persistent_context(
@@ -223,19 +221,22 @@ def main():
                 continue
         else:
             nickname = target
-            # Try friends.json for known sec_uid
-            cached = _lookup_secuid(nickname)
-            if cached:
-                sec_uid = cached
-                print(f"  sec_uid from friends.json")
+            # Look up sec_uid from friends.json as fallback
+            friend = friends.get(nickname)
+            if friend:
+                sec_uid = friend.get("sec_uid", "")
+                print(f"  -> found in friends cache (sec_uid={sec_uid[:30]}...)")
 
         # Open browser for this target
         page = context.pages[0] if context.pages else context.new_page()
         context.add_cookies(cookies)
 
         # Route A: sec_uid known → profile→DM (most reliable)
+        # Prefer profile -> 私信 when sec_uid is available. Chat search can return
+        # group conversations whose recent messages/member names match the nickname.
         chat_opened = False
         if sec_uid:
+            print(f"  Opening via profile -> 私信 (sec_uid exact match)...")
             chat_opened = open_chat_via_profile(page, sec_uid, nickname)
             if chat_opened:
                 # Wait for chat UI to render
@@ -243,6 +244,8 @@ def main():
                     page.wait_for_selector("[contenteditable='true']", timeout=15000)
                 except:
                     pass
+            else:
+                print(f"  Profile open failed, trying chat search...")
 
         # Route B: fallback → /chat page
         if not chat_opened:
