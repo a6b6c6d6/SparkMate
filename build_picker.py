@@ -251,7 +251,8 @@ function renderCards(friends) {
       var tags = [
         [1, "文字"],
         [2, "图片"],
-        [3, "表情"]
+        [3, "表情"],
+        [4, "视频"]
       ];
       for (var t = 0; t < tags.length; t++) {
         var tag = document.createElement("span");
@@ -335,7 +336,7 @@ function buildTasksJSON() {
     }
     tasks.push(entry);
   }
-  return JSON.stringify({ _说明: "target 填昵称或抖音号, actions: 1=文字 2=图片 3=表情 0=自定义", tasks: tasks }, null, 2);
+  return JSON.stringify({ _说明: "target 填昵称或抖音号, actions: 0=自定义文字 1=文字 2=图片 3=表情 4=视频", tasks: tasks }, null, 2);
 }
 
 function exportJSON() {

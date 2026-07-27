@@ -119,8 +119,30 @@ time.sleep(1)
 
 # ====== SEND EMOJI (click = send directly) ======
 print("[5] Sending emoji...")
-# Click emoji button
-page.locator("svg.messageMsgInputiconAction").first.click(force=True, timeout=3000)
+emoji_selectors = [
+    "svg.messageMsgInputiconAction",
+    "[class*='iconAction']",
+    "[class*='emojiIcon']",
+]
+for selector in emoji_selectors:
+    try:
+        locator = page.locator(selector).first
+        if locator.count() > 0 and locator.is_visible():
+            locator.click(force=True, timeout=3000)
+            break
+    except Exception:
+        continue
+else:
+    page.evaluate("""() => {
+        const icons = document.querySelectorAll('svg');
+        for (const icon of icons) {
+            const cls = icon.className?.baseVal || '';
+            if (cls.includes('iconAction') || cls.includes('emoji')) {
+                icon.click();
+                return;
+            }
+        }
+    }""")
 time.sleep(3)
 
 # Click a random fun emoji (not 续火花)

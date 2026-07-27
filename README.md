@@ -115,7 +115,7 @@ COOKIES_USER1=[{"name":"sessionid","value":"example_session_id","domain":".douyi
 1. 运行 `python build_friends_json.py` 生成好友数据（`friends.json`）
 2. 运行 `python build_picker.py` 生成本地配置器（`docs/friend_picker.local.html`）
 3. 浏览器打开 `docs/friend_picker.local.html`
-4. 勾选好友、配置动作（文字/图片/表情/自定义），点击「导出 JSON」或「一键复制」
+4. 勾选好友、配置动作（文字/图片/表情/视频/自定义），点击「导出 JSON」或「一键复制」
 5. 将复制的内容保存为 `tasks.json`
 
 > 💡 `friends.json` 和 `docs/friend_picker.local.html` 都包含真实好友信息，已加入 `.gitignore`，请不要提交。仓库中的 `docs/friend_picker.html` 仅保留空数据模板。
@@ -128,16 +128,20 @@ COOKIES_USER1=[{"name":"sessionid","value":"example_session_id","domain":".douyi
 {
   "tasks": [
     {"target": "好友昵称", "actions": [1, 2, 3]},
-    {"target": "另一个好友", "actions": [3], "message": "自定义文字"}
+    {"target": "另一个好友", "actions": [4]},
+    {"target": "指定分类", "actions": [4], "video_category": "风景"},
+    {"target": "自定义消息", "actions": [0], "message": "自定义文字"}
   ]
 }
 ```
 
-其中 `actions`：`1`=文字（一言） `2`=图片 `3`=续火花表情 `0`=自定义文字
+其中 `actions`：`0`=自定义文字 `1`=文字（一言） `2`=4K/高清随机图片 `3`=续火花表情 `4`=随机视频。
+
+视频分类默认从“明星、热舞、风景、游戏、动物、动漫”中随机选择；也可以通过 `video_category` 指定其中一类。
 
 > 为避免聊天搜索把好友昵称误匹配到群聊或最近消息，`run_tasks.py` 会先从
-> `friends.json` 读取目标好友的 `sec_uid`。如果命中缓存，会优先打开用户主页再点
-> 「私信」；只有没有 `sec_uid` 或主页私信打开失败时，才回退到聊天页搜索。
+> `friends.json` 读取目标好友的 `sec_uid`。聊天搜索结果只有在个人主页链接与该
+> `sec_uid` 一致时才会被点击，否则会回退到用户主页的「私信」入口。
 > 因此建议在批量任务前先运行 `python build_friends_json.py` 更新好友缓存。
 
 ### 4. 运行
@@ -159,7 +163,7 @@ python send_image.py sec_uid:MS4wLjA...    # 直接 sec_uid → 最快，跳过�
 python send_image.py "好友" --no-headless  # 有头模式（处理验证码时用）
 ```
 
-> `send_image.py` 优先走「主页→私信」路由（比聊天搜索更稳定），昵称会自动从 `friends.json` 匹配 sec_uid。有 `friends.json` 时甚至不需要先搜索。
+> `send_image.py` 会从 `friends.json` 匹配 sec_uid，并使用与批量任务相同的严格身份校验和 4K/高清图片回退源。
 
 > **两种入口区别：**
 > - `run_tasks.py` — **推荐**，从 `tasks.json` 读取任务列表，适合单用户场景
@@ -167,25 +171,26 @@ python send_image.py "好友" --no-headless  # 有头模式（处理验证码时
 
 ### 无头模式（后台运行）
 
-**首次使用建议用可视化浏览器（默认）**，因为抖音可能弹出风控验证（短信验证码 / 滑块验证 / 扫码等），需要手动操作完成。验证通过后浏览器会在 `browser_data/` 目录保存登录状态。
+**首次使用建议设置 `HEADLESS=0` 使用可视化浏览器**，因为抖音可能弹出风控验证（短信验证码 / 滑块验证 / 扫码等），需要手动操作完成。验证通过后浏览器会在 `browser_data/` 目录保存登录状态。
 
 **验证通过后，可改为无头模式实现后台静默运行：**
 
 | 入口 | 如何开启无头 |
 |------|------------|
-| `run_tasks.py` | 编辑脚本，把 `headless=False` 改为 `headless=True` |
+| `run_tasks.py` | `HEADLESS=1`（默认）；调试或验证时设为 `HEADLESS=0` |
 | `build_friends_json.py` 等独立脚本 | 同上，改各自文件里的 `headless` 参数 |
 | `main.py` | 编辑 `utils/config.py`，把 `DEBUG = True` 改为 `DEBUG = False` |
 | `send_image.py` | 默认已开启无头，可用 `HEADLESS=0` 切换或 `--no-headless` 参数 |
 
-```python
-# 以 run_tasks.py 为例，找到这一行（约第 186 行）：
-context = playwright.chromium.launch_persistent_context(
-    USER_DATA_DIR, headless=True, viewport={"width": 1280, "height": 900}  # 改为 True
-)
+```powershell
+# Windows PowerShell：显示浏览器
+$env:HEADLESS='0'; python run_tasks.py
+
+# Windows PowerShell：恢复无头模式
+$env:HEADLESS='1'; python run_tasks.py
 ```
 
-> **注意：** 改用无头后如再次触发风控验证，需要切回 `headless=False` 手动过验证，然后再改回去。
+> **注意：** 无头模式下如再次触发风控验证，需要临时设置 `HEADLESS=0` 手动完成验证。
 
 ### 定时自动运行
 
@@ -241,6 +246,8 @@ crontab -l
 |------|------|------|
 | `COOKIES_{UNIQUE_ID}` | **必填** | 对应用户的抖音 Cookie（JSON 数组格式） |
 | `HEADLESS` | 可选 | `1`=无头模式（默认），`0`=有头模式（调试/过验证用） |
+| `DEBUG` | 可选 | `1`=显示核心模块浏览器并启用调试模式，默认 `0` |
+| `TASKS_FILE` | 可选 | `run_tasks.py` 使用的任务文件，默认 `tasks.json` |
 | `MATCH_MODE` | 可选 | 好友匹配模式：`nickname`（默认）或 `short_id` |
 | `LOG_LEVEL` | 可选 | 日志级别：`DEBUG` / `INFO` / `WARNING` / `ERROR` |
 | `MESSAGE_TEMPLATE` | 可选 | 消息模板，默认使用一言 API 随机内容 |
@@ -264,6 +271,7 @@ crontab -l
 ├── build_friends_json.py  # 好友列表抓取（互关好友）
 ├── build_picker.py        # 好友选择器 HTML 生成器
 ├── build_shortid_map.py   # ShortID 映射生成
+├── media_sources.py       # 4K 图片回退与随机视频 API
 ├── run_tasks.py           # 批量任务调度器（读取 tasks.json）
 ├── main.py                # 入口（从 .env 读取配置，支持多用户）
 ├── .env                   # 环境配置（Cookie、任务参数，已 gitignore）

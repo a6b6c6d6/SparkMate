@@ -10,7 +10,7 @@ logger = setup_logger(level=logging.DEBUG)
 是否启用调试模式
 更详细的日志打印，浏览器操作可视化等
 """
-DEBUG = True
+DEBUG = os.getenv("DEBUG", "0") == "1"
 config = None
 userData = None
 

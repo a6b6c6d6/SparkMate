@@ -1,5 +1,38 @@
-"""Resolve Douyin short_id → nickname + sec_uid + uid via douyin.com search API."""
+"""Resolve Douyin users and open verified direct-message conversations."""
+import re
 import time
+
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+
+
+CHAT_INPUT_SELECTOR = "[contenteditable='true']"
+
+
+def dismiss_dialogs(page):
+    """Dismiss currently visible confirmation dialogs without fixed delays."""
+    for _ in range(3):
+        clicked = False
+        for label in ["确认", "保存", "取消"]:
+            button = page.get_by_role("button", name=label, exact=True).first
+            try:
+                if button.is_visible():
+                    button.click(timeout=1500)
+                    clicked = True
+            except Exception:
+                pass
+        if not clicked:
+            break
+
+
+def wait_for_chat_ready(page, timeout=10000):
+    """Return as soon as the chat composer is usable."""
+    try:
+        page.locator(CHAT_INPUT_SELECTOR).first.wait_for(
+            state="visible", timeout=timeout
+        )
+        return True
+    except PlaywrightTimeoutError:
+        return False
 
 def resolve_via_search(short_id, cookies, user_data_dir, playwright_module):
     """Search short_id on douyin.com main page, intercept im/user/info API.
@@ -64,35 +97,21 @@ def open_chat_via_profile(page, sec_uid, nickname):
     """Navigate to user profile and click 私信 (private message) button to open chat.
     Returns True if chat was opened."""
     page.goto(f"https://www.douyin.com/user/{sec_uid}", wait_until="domcontentloaded")
-    time.sleep(3)
+    dismiss_dialogs(page)
 
-    # Wait for React SPA to render (douyin.com is client-side rendered)
+    button = page.get_by_role(
+        "button", name=re.compile(r"^(私信|发消息|聊天)$")
+    ).first
     try:
-        page.wait_for_selector("button:has-text('私信')", timeout=15000)
-    except:
-        pass
+        button.wait_for(state="visible", timeout=15000)
+        button.click(force=True, timeout=5000)
+        if wait_for_chat_ready(page):
+            return True
+        print("    open_chat_via_profile: chat input did not become ready")
+    except Exception as exc:
+        print(f"    open_chat_via_profile: click failed - {exc}")
 
-    for _ in range(5):
-        for label in ["确认", "保存", "取消"]:
-            for btn in page.locator(f"button:has-text('{label}')").all():
-                try:
-                    if btn.is_visible():
-                        btn.click(timeout=2000)
-                        time.sleep(2)
-                except:
-                    pass
-
-    # Try all visible 私信 buttons (there may be multiple with semi-button design system)
-    for btn in page.locator("button:has-text('私信')").all():
-        try:
-            if btn.is_visible():
-                btn.click(timeout=5000, force=True)
-                time.sleep(8)
-                return True
-        except:
-            continue
-
-    # Fallback: JS click bypasses Playwright pointer-event interception (e.g. header overlay)
+    # Fallback: JS click bypasses Playwright pointer-event interception.
     js_result = page.evaluate("""() => {
         const btns = document.querySelectorAll('button');
         for (const btn of btns) {
@@ -107,39 +126,65 @@ def open_chat_via_profile(page, sec_uid, nickname):
         return 'not found';
     }""")
     if js_result.startswith('clicked'):
-        time.sleep(8)
-        return True
+        print(f"    open_chat_via_profile: {js_result} (JS fallback)")
+        return wait_for_chat_ready(page)
 
+    print(
+        "    open_chat_via_profile: no 私信/发消息/聊天 button found "
+        f"(url={page.url})"
+    )
     return False
 
 
 def find_or_open_chat(page, nickname, sec_uid):
     """Try to find user via chat search, fallback to profile→私信.
     Returns True if chat was opened."""
-    # Method 1: Search in chat panel
-    page.evaluate(f"""(term) => {{
-        const input = document.querySelector('input[placeholder="搜索"]');
-        if (input) {{
-            const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-            setter.call(input, term);
-            input.dispatchEvent(new Event('input', {{bubbles: true}}));
-        }}
-    }}""", nickname)
-    time.sleep(4)
+    # Only click a search result when its profile link proves the expected
+    # sec_uid. Nickname-only search can otherwise select a group or namesake.
+    search_box = page.locator("input[placeholder*='搜索']").first
+    try:
+        search_box.wait_for(state="visible", timeout=3000)
+        search_box.fill(nickname)
+        page.locator(".SearchPanelitemchat_btn").first.wait_for(
+            state="visible", timeout=5000
+        )
+    except PlaywrightTimeoutError:
+        search_box = None
 
-    chat_btn = page.locator(".SearchPanelitemchat_btn").first
-    if chat_btn.count() > 0 and chat_btn.is_visible():
-        chat_btn.click(timeout=3000)
-        time.sleep(5)
-        return True
+    if search_box and sec_uid:
+        profile_link = page.locator(f"a[href*='/user/{sec_uid}']").first
+        try:
+            profile_link.wait_for(state="visible", timeout=2000)
+            result = profile_link.locator(
+                "xpath=ancestor::*[.//*[contains(@class, "
+                "'SearchPanelitemchat_btn')]][1]"
+            )
+            chat_button = result.locator(".SearchPanelitemchat_btn").first
+            if chat_button.is_visible():
+                chat_button.click(timeout=3000)
+                chat_button.wait_for(state="hidden", timeout=5000)
+                if wait_for_chat_ready(page):
+                    return True
+        except Exception:
+            pass
 
     # Method 2: Check conversation list
-    conv_items = page.locator("[data-e2e='conversation-item']")
-    for i in range(conv_items.count()):
-        if nickname in (conv_items.nth(i).text_content() or ""):
-            conv_items.nth(i).click()
-            time.sleep(5)
-            return True
+    # Without an identity key, accept only a direct conversation whose first
+    # visible line exactly matches the nickname.
+    if not sec_uid:
+        conversation_items = page.locator("[data-e2e='conversation-item']")
+        for index in range(conversation_items.count()):
+            lines = [
+                line.strip()
+                for line in (
+                    conversation_items.nth(index).inner_text() or ""
+                ).splitlines()
+                if line.strip()
+            ]
+            if lines and lines[0] == nickname:
+                conversation_items.nth(index).click()
+                if wait_for_chat_ready(page):
+                    return True
 
     # Method 3: Navigate via profile → 私信
     if sec_uid:

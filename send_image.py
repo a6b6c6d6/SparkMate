@@ -8,11 +8,13 @@ Usage:
 
 Mode: headless=True by default. Set HEADLESS=0 env var or edit below for visible browser.
 """
-import os, sys, time, json, tempfile, urllib.request
+import json, os, tempfile
 from dotenv import load_dotenv
 load_dotenv(".env")
 
 from playwright.sync_api import sync_playwright
+from media_sources import download_image, fetch_random_image_data
+from resolve_user import dismiss_dialogs, find_or_open_chat
 from utils.config import get_userData
 
 USER_DATA_DIR = os.path.join(os.path.dirname(__file__), "browser_data")
@@ -33,28 +35,6 @@ def _lookup_secuid(nickname: str):
     except:
         pass
     return None
-
-
-def _wait_react(page, selector: str, timeout=15000):
-    """Wait for a React-rendered element to appear (douyin.com SPA)."""
-    try:
-        page.wait_for_selector(selector, timeout=timeout)
-        return True
-    except:
-        return False
-
-
-def _dismiss_dialogs(page):
-    """Dismiss trust-login / save dialogs."""
-    for _ in range(5):
-        for label in ["确认", "保存", "取消"]:
-            for btn in page.locator(f"button:has-text('{label}')").all():
-                try:
-                    if btn.is_visible():
-                        btn.click(timeout=2000)
-                        time.sleep(2)
-                except:
-                    pass
 
 
 def send_image(target: str, image_url: str = None):
@@ -87,91 +67,61 @@ def send_image(target: str, image_url: str = None):
             sec_uid = cached
             print(f"  Found sec_uid in friends.json for '{nickname}'")
 
-    # Fetch image
-    if image_url is None:
-        req = urllib.request.Request("https://api.ku.cm/images/?type=json",
-                                     headers={"User-Agent": "Mozilla/5.0"})
-        image_url = json.loads(urllib.request.urlopen(req).read())["data"]["url"]
-
-    print(f"Image: {image_url}")
-    req = urllib.request.Request(image_url, headers={"User-Agent": "Mozilla/5.0"})
-    img_data = urllib.request.urlopen(req).read()
-    tmp = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
-    tmp.write(img_data)
-    tmp.close()
-
-    # Open browser
-    os.makedirs(USER_DATA_DIR, exist_ok=True)
-    playwright = sync_playwright().start()
-    context = playwright.chromium.launch_persistent_context(
-        USER_DATA_DIR, headless=HEADLESS, viewport={"width": 1280, "height": 900}
-    )
-    page = context.pages[0] if context.pages else context.new_page()
-    context.add_cookies(cookies)
-
-    opened = False
-    # Route A: sec_uid known → profile page → 私信 (most reliable)
-    if sec_uid:
-        print(f"  Opening profile→DM for {nickname}...")
-        from resolve_user import open_chat_via_profile
-        opened = open_chat_via_profile(page, sec_uid, nickname)
-        if opened:
-            # Chat panel opens within the same page (SPA), wait for it to render
-            _wait_react(page, "input[type='file']", timeout=15000)
+    tmp_name = None
+    playwright = None
+    context = None
+    try:
+        if image_url is None:
+            image_data = fetch_random_image_data()
         else:
-            print(f"  Profile DM failed, falling back to chat search...")
+            image_data, final_url = download_image(image_url)
+            print(f"    -> custom image: {final_url}")
 
-    # Route B: fallback → /chat page → search for user
-    if not opened:
+        tmp = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
+        tmp.write(image_data)
+        tmp.close()
+        tmp_name = tmp.name
+
+        os.makedirs(USER_DATA_DIR, exist_ok=True)
+        playwright = sync_playwright().start()
+        context = playwright.chromium.launch_persistent_context(
+            USER_DATA_DIR,
+            headless=HEADLESS,
+            viewport={"width": 1280, "height": 900},
+        )
+        page = context.pages[0] if context.pages else context.new_page()
+        context.add_cookies(cookies)
         page.goto("https://www.douyin.com/chat", wait_until="domcontentloaded")
-        time.sleep(3)
-        _wait_react(page, "[data-e2e='conversation-item']")
-        _dismiss_dialogs(page)
+        dismiss_dialogs(page)
 
-        from resolve_user import find_or_open_chat
         if not find_or_open_chat(page, nickname, sec_uid):
             print(f"  ERROR: could not open chat with '{nickname}'")
+            return False
+
+        print("  Uploading image...")
+        file_input = page.locator("input[type='file']").first
+        file_input.wait_for(state="attached", timeout=15000)
+        file_input.set_input_files(tmp_name)
+
+        modal_button = page.locator(
+            "button.MsgInputSendFileModalbtnSure"
+        ).first
+        modal_button.wait_for(state="visible", timeout=30000)
+        modal_button.click(timeout=5000)
+        modal_button.wait_for(state="hidden", timeout=90000)
+        page.wait_for_timeout(5000)
+        print("  Image sent!")
+        return True
+    except Exception as exc:
+        print(f"  ERROR: failed to send image: {exc}")
+        return False
+    finally:
+        if context:
             context.close()
+        if playwright:
             playwright.stop()
-            os.unlink(tmp.name)
-            return
-
-        _dismiss_dialogs(page)
-        time.sleep(2)
-
-    # Send image
-    print("  Uploading image...")
-    file_input = page.locator("input[type='file']").first
-    if file_input.count() == 0:
-        print("  ERROR: no file input found on page")
-        context.close()
-        playwright.stop()
-        os.unlink(tmp.name)
-        return
-
-    file_input.set_input_files(tmp.name)
-    time.sleep(3)
-
-    for i in range(15):
-        time.sleep(1)
-        modal_btn = page.locator("button.MsgInputSendFileModalbtnSure").first
-        if modal_btn.count() > 0 and modal_btn.is_visible():
-            modal_btn.click(force=True, timeout=3000)
-            print("  Send clicked!")
-            break
-    else:
-        print("  Modal button did not appear")
-
-    for i in range(15):
-        time.sleep(1.5)
-        modal = page.locator("[class*='MsgInputSendFileModal']").first
-        if modal.count() == 0 or not modal.is_visible():
-            print("  Image sent!")
-            break
-
-    os.unlink(tmp.name)
-    context.close()
-    playwright.stop()
+        if tmp_name and os.path.exists(tmp_name):
+            os.unlink(tmp_name)
 
 
 if __name__ == "__main__":
@@ -179,7 +129,7 @@ if __name__ == "__main__":
     p = argparse.ArgumentParser(description="Send a random image to a Douyin friend")
     p.add_argument("target", nargs="?", default="你的好友昵称",
                    help="Nickname, short_id (digits), or sec_uid:<value>")
-    p.add_argument("--url", help="Custom image URL (default: random from api.ku.cm)")
+    p.add_argument("--url", help="Custom image URL (default: random 4K image)")
     p.add_argument("--no-headless", action="store_true", help="Show browser window")
     args = p.parse_args()
     if args.no_headless:
