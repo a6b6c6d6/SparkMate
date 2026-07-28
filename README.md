@@ -196,18 +196,7 @@ $env:HEADLESS='1'; python run_tasks.py
 
 火花每 24 小时不互动就会熄灭，建议每天定时跑一次即可。
 
-#### GitHub Actions
-
-仓库内置 `.github/workflows/daily.yml`，默认每天北京时间 09:00 运行，也支持在 Actions 页面手动触发。只需在仓库的 `Settings → Secrets and variables → Actions` 添加：
-
-| Secret | 内容 |
-|--------|------|
-| `DOUYIN_COOKIES_USER1` | 抖音 Cookie JSON 数组 |
-| `SPARKMATE_TASKS_JSON` | 完整的 `tasks.json` 内容 |
-
-添加后进入 `Actions → SparkMate Daily → Run workflow` 手动测试。确认 Cookie 在 GitHub 无头环境中有效后，保留定时触发即可。工作流会校验两个 Secret、安装 Chromium、执行 `run_tasks.py`，并保留 7 天运行日志。
-
-> GitHub 托管运行器的网络和 IP 每次可能变化，抖音也可能要求验证码。若频繁触发验证，建议使用能保留浏览器状态的 self-hosted runner。
+建议在已经完成登录和风控验证的本机运行。云端临时运行器的网络、IP 和浏览器环境会变化，容易触发短信验证码，且无法保留本地 `browser_data` 登录状态。
 
 #### Windows — 任务计划程序
 
